@@ -38,3 +38,19 @@
   (is (= {:a 1} (coll/assoc-some {:a 1} :b nil)))
   (is (= {} (coll/assoc-some {} :a nil :b nil)))
   (is (= {:a 1 :b 2} (coll/assoc-some {} :a 1 :b 2 :c nil))))
+
+(deftest edge-and-nil-cases
+  ;; deep-merge: a map and a non-map scalar — scalar wins, does not merge
+  (is (= {:a 1} (coll/deep-merge {:a {:x 1}} {:a 1})))
+  ;; deep-merge: nil right side is a scalar and wins (erases a map)
+  (is (= {:a nil} (coll/deep-merge {:a {:x 1}} {:a nil})))
+  ;; deep-merge: empty maps are transparent
+  (is (= {:a 1} (coll/deep-merge {:a 1} {})))
+  (is (= {:a 1} (coll/deep-merge {} {:a 1})))
+  ;; index-by: nil keys are dropped (never collapse into a nil-keyed entry)
+  (is (= {} (coll/index-by (constantly nil) [{:id 1} {:id 2}])))
+  ;; index-by: non-collection input is tolerated
+  (is (= {} (coll/index-by :id [])))
+  ;; map-vals/map-keys over empty map is empty
+  (is (= {} (coll/map-vals inc {})))
+  (is (= {} (coll/map-keys name {}))))
