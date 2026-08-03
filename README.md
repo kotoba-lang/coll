@@ -23,6 +23,15 @@ These are pure functions with no host capability — the data-layer foundation
 that `langchain` / `langgraph` / `statechart` / `num` and the rest of the
 vertical `*-clj` libs stand on.
 
+## Kotoba source authority
+
+`src/kotoba/lang/bounded_coll.kotoba` is the sovereign, zero-capability kernel
+for bounded string and keyword sets. It compiles to restricted browser JS and
+typed browser Wasm. The CLJC namespace remains the general higher-order oracle
+for map transforms, recursive merge, and indexing until the generic collection
+and closure ABIs are sealed. See `migration/bounded-coll-v1.edn` for that
+boundary.
+
 ## Install
 
 ```clojure
