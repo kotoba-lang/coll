@@ -54,3 +54,51 @@
   ;; map-vals/map-keys over empty map is empty
   (is (= {} (coll/map-vals inc {})))
   (is (= {} (coll/map-keys name {}))))
+
+(deftest set-union-variadic
+  (is (= #{} (coll/set-union)))
+  (is (= #{1 2} (coll/set-union #{1 2})))
+  (is (= #{1 2 3} (coll/set-union #{1 2} #{2 3})))
+  (is (= #{1 2 3 4} (coll/set-union #{1} #{2} #{3} #{4})))
+  (is (= #{} (coll/set-union #{} #{}))))
+
+(deftest set-intersection-variadic
+  (is (= #{2} (coll/set-intersection #{1 2} #{2 3})))
+  (is (= #{} (coll/set-intersection #{1} #{2})))
+  (is (= #{2} (coll/set-intersection #{1 2 3} #{2 3 4} #{2 5})))
+  (is (= #{1 2} (coll/set-intersection #{1 2}))))
+
+(deftest set-difference-variadic
+  (is (= #{1} (coll/set-difference #{1 2} #{2 3})))
+  (is (= #{1 2} (coll/set-difference #{1 2} #{3})))
+  (is (= #{1} (coll/set-difference #{1 2 3} #{2} #{3})))
+  (is (= #{1 2} (coll/set-difference #{1 2}))))
+
+(deftest bounded-prewalk-transforms-top-down
+  ;; every number doubled, top-down traversal order does not affect this
+  ;; particular transform's result but does affect side-effecting order
+  (is (= {:a 2 :b [4 6]}
+         (coll/bounded-prewalk (fn [x] (if (number? x) (* x 2) x))
+                                {:a 1 :b [2 3]})))
+  (is (= [1 2 3] (coll/bounded-prewalk identity [1 2 3])))
+  (is (= '(1 2 3) (coll/bounded-prewalk identity '(1 2 3))))
+  (is (= #{1 2 3} (coll/bounded-prewalk identity #{1 2 3}))))
+
+(deftest bounded-postwalk-transforms-bottom-up
+  (is (= {:a 2 :b [4 6]}
+         (coll/bounded-postwalk (fn [x] (if (number? x) (* x 2) x))
+                                 {:a 1 :b [2 3]})))
+  (is (= [1 2 3] (coll/bounded-postwalk identity [1 2 3]))))
+
+(deftest bounded-walk-rejects-past-depth-limit
+  (let [deep (reduce (fn [acc _] {:n acc}) 0 (range 5))]
+    ;; depth 0 is the root map itself; five nested maps need depth >= 5
+    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+                           #"bounded depth limit"
+                           (coll/bounded-prewalk identity 2 deep)))
+    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+                           #"bounded depth limit"
+                           (coll/bounded-postwalk identity 2 deep)))
+    ;; a depth ceiling that fits does not throw
+    (is (= deep (coll/bounded-prewalk identity 10 deep)))
+    (is (= deep (coll/bounded-postwalk identity 10 deep)))))
