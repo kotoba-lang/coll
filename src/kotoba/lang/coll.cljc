@@ -70,3 +70,80 @@
      (if (seq kvs)
        (recur m (first kvs) (second kvs) (nnext kvs))
        m))))
+
+;; -- Set algebra ------------------------------------------------------------
+;; Replaces clojure.set/union|intersection|difference in the frontier
+;; (90-docs/migration/kotoba-cljc-common-lib-frontier.edn, :collection-walk-set).
+;; General, unbounded-arity oracle form. The sovereign .kotoba kernel keeps
+;; only the bounded 32-item typed-set primitives -- general set algebra stays
+;; here because restricted-JS KIR rejects it (measured 2026-08-02, see
+;; migration/bounded-coll-v1.edn :retained :set-algebra).
+
+(defn set-union
+  "Union of zero or more sets. Mirrors clojure.set/union without the
+  clojure.set dependency."
+  ([] #{})
+  ([s1] (or s1 #{}))
+  ([s1 s2] (into (or s1 #{}) (or s2 #{})))
+  ([s1 s2 & sets] (reduce set-union (set-union s1 s2) sets)))
+
+(defn set-intersection
+  "Intersection of one or more sets. Mirrors clojure.set/intersection."
+  ([s1] s1)
+  ([s1 s2] (into (empty s1) (filter #(contains? s2 %)) s1))
+  ([s1 s2 & sets] (reduce set-intersection (set-intersection s1 s2) sets)))
+
+(defn set-difference
+  "Elements of s1 not present in any of the other sets. Mirrors
+  clojure.set/difference."
+  ([s1] s1)
+  ([s1 s2] (into (empty s1) (remove #(contains? s2 %)) s1))
+  ([s1 s2 & sets] (reduce set-difference (set-difference s1 s2) sets)))
+
+;; -- Bounded walk -------------------------------------------------------
+;; Replaces clojure.walk/prewalk|postwalk in the frontier
+;; (:collection-walk-set, forbidden [:unbounded-recursion]). Unlike
+;; clojure.walk, both variants take an explicit depth ceiling and throw
+;; instead of recursing without bound, so a cyclical or adversarial input
+;; cannot exhaust the stack.
+
+(def default-max-walk-depth
+  "Depth ceiling used when bounded-prewalk/bounded-postwalk are called
+  without an explicit max-depth."
+  1024)
+
+(defn- walk-depth-exceeded! [limit]
+  (throw (ex-info "coll walk exceeds bounded depth limit"
+                   {:kotoba.lang.coll/reason :walk/depth-exceeded :limit limit})))
+
+(defn- walk-children [walk-one x depth]
+  (cond
+    (map? x) (into (empty x)
+                    (map (fn [[k v]] [(walk-one k depth) (walk-one v depth)]))
+                    x)
+    (seq? x) (doall (map #(walk-one % depth) x))
+    (coll? x) (into (empty x) (map #(walk-one % depth)) x)
+    :else x))
+
+(defn bounded-prewalk
+  "Like clojure.walk/prewalk: apply f to form and then to its children,
+  top-down. Bounded by max-depth (default default-max-walk-depth); throws
+  ex-info rather than recursing without limit once the ceiling is crossed."
+  ([f form] (bounded-prewalk f default-max-walk-depth form))
+  ([f max-depth form]
+   (letfn [(walk [x depth]
+             (when (> depth max-depth) (walk-depth-exceeded! max-depth))
+             (walk-children walk (f x) (inc depth)))]
+     (walk form 0))))
+
+(defn bounded-postwalk
+  "Like clojure.walk/postwalk: apply f to form's children first, then to
+  form itself, bottom-up. Bounded by max-depth (default
+  default-max-walk-depth); throws ex-info rather than recursing without
+  limit once the ceiling is crossed."
+  ([f form] (bounded-postwalk f default-max-walk-depth form))
+  ([f max-depth form]
+   (letfn [(walk [x depth]
+             (when (> depth max-depth) (walk-depth-exceeded! max-depth))
+             (f (walk-children walk x (inc depth))))]
+     (walk form 0))))
