@@ -102,3 +102,166 @@
     ;; a depth ceiling that fits does not throw
     (is (= deep (coll/bounded-prewalk identity 10 deep)))
     (is (= deep (coll/bounded-postwalk identity 10 deep)))))
+
+;; ---------------------------------------------------------------------------
+;; clojure.set gap-fill: subset?/superset?/select/project/rename(-keys)/
+;; index/join. Every expected value below is hand-computed against real
+;; clojure.set semantics (see coll.cljc's docstrings, which transcribe them),
+;; not just "returns something" -- each relation is small enough to verify
+;; by hand and is checked against a concrete expected set/map.
+
+(deftest subset-and-superset
+  (is (true? (coll/subset? #{1 2} #{1 2 3})))
+  (is (true? (coll/subset? #{} #{1})))
+  (is (true? (coll/subset? #{} #{})))
+  (is (true? (coll/subset? #{1 2 3} #{1 2 3})))
+  (is (false? (coll/subset? #{1 2 3} #{1 2})))
+  (is (false? (coll/subset? #{4} #{1 2 3})))
+  (is (true? (coll/superset? #{1 2 3} #{1 2})))
+  (is (true? (coll/superset? #{1} #{})))
+  (is (true? (coll/superset? #{1 2 3} #{1 2 3})))
+  (is (false? (coll/superset? #{1} #{1 2})))
+  (is (false? (coll/superset? #{1 2 3} #{4}))))
+
+(def ^:private people
+  "Test relation: a set of maps sharing an :id/:name/:dept schema."
+  #{{:id 1 :name "Alice" :dept "eng"}
+    {:id 2 :name "Bob" :dept "eng"}
+    {:id 3 :name "Cara" :dept "sales"}})
+
+(def ^:private depts
+  "Test relation joinable against `people` on the shared :dept key."
+  #{{:dept "eng" :manager "Dana"}
+    {:dept "sales" :manager "Erin"}})
+
+(deftest select-filters-a-relation
+  (is (= #{{:id 1 :name "Alice" :dept "eng"}
+           {:id 2 :name "Bob" :dept "eng"}}
+         (coll/select #(= "eng" (:dept %)) people)))
+  (is (= #{} (coll/select (constantly false) people)))
+  (is (= people (coll/select (constantly true) people))))
+
+(deftest project-keeps-only-named-keys
+  (is (= #{{:id 1 :name "Alice"} {:id 2 :name "Bob"} {:id 3 :name "Cara"}}
+         (coll/project people [:id :name])))
+  ;; projecting away every differentiating key collapses duplicates -- the
+  ;; result is a set, per clojure.set/project
+  (is (= #{{:dept "eng"} {:dept "sales"}} (coll/project people [:dept])))
+  (is (= #{{}} (coll/project people []))))
+
+(deftest rename-keys-renames-a-single-map
+  (is (= {:id 1 :full-name "Alice"} (coll/rename-keys {:id 1 :name "Alice"} {:name :full-name})))
+  ;; a kmap key absent from the map is a no-op for that entry
+  (is (= {:id 1 :name "Alice"} (coll/rename-keys {:id 1 :name "Alice"} {:missing :x})))
+  (is (= {} (coll/rename-keys {} {:a :b}))))
+
+(deftest rename-applies-rename-keys-across-a-relation
+  (is (= #{{:id 1 :dept "eng" :full-name "Alice"}
+           {:id 2 :dept "eng" :full-name "Bob"}
+           {:id 3 :dept "sales" :full-name "Cara"}}
+         (coll/rename people {:name :full-name}))))
+
+(deftest index-groups-by-key-values
+  (is (= {{:dept "eng"} #{{:id 1 :name "Alice" :dept "eng"}
+                          {:id 2 :name "Bob" :dept "eng"}}
+          {:dept "sales"} #{{:id 3 :name "Cara" :dept "sales"}}}
+         (coll/index people [:dept])))
+  (is (= {} (coll/index #{} [:dept]))))
+
+(deftest join-natural-join-on-shared-key
+  (is (= #{{:id 1 :name "Alice" :dept "eng" :manager "Dana"}
+           {:id 2 :name "Bob" :dept "eng" :manager "Dana"}
+           {:id 3 :name "Cara" :dept "sales" :manager "Erin"}}
+         (coll/join people depts)))
+  ;; either side empty -> empty result, not an error
+  (is (= #{} (coll/join #{} depts)))
+  (is (= #{} (coll/join people #{})))
+  ;; the well-known clojure.set doc example (compositions/composers),
+  ;; independently hand-verified, as a second natural-join fixture
+  (is (= #{{:name "Art of Fugue" :composer "Bach" :country "Germany"}
+           {:name "Musical Offering" :composer "Bach" :country "Germany"}
+           {:name "Requiem" :composer "Verdi" :country "Italy"}}
+         (coll/join #{{:name "Art of Fugue" :composer "Bach"}
+                      {:name "Musical Offering" :composer "Bach"}
+                      {:name "Requiem" :composer "Verdi"}}
+                    #{{:composer "Bach" :country "Germany"}
+                      {:composer "Verdi" :country "Italy"}}))))
+
+(deftest join-explicit-key-mapping
+  (let [orders #{{:order-id 1 :cust-id 10 :amount 100}
+                 {:order-id 2 :cust-id 11 :amount 200}}
+        customers #{{:id 10 :name "Alice"}
+                    {:id 11 :name "Bob"}}]
+    (is (= #{{:order-id 1 :cust-id 10 :amount 100 :id 10 :name "Alice"}
+             {:order-id 2 :cust-id 11 :amount 200 :id 11 :name "Bob"}}
+           (coll/join orders customers {:cust-id :id})))
+    ;; unmatched rows on either side are dropped, not nil-padded
+    (is (= #{{:order-id 1 :cust-id 10 :amount 100 :id 10 :name "Alice"}}
+           (coll/join orders #{{:id 10 :name "Alice"}} {:cust-id :id})))))
+
+;; ---------------------------------------------------------------------------
+;; clojure.walk gap-fill: walk/prewalk/postwalk/prewalk-replace/
+;; postwalk-replace -- the genuinely UNBOUNDED counterparts of
+;; bounded-prewalk/bounded-postwalk above. See coll.cljc's "READ THIS BEFORE
+;; FIXING" section header: bounded-prewalk/bounded-postwalk are untouched by
+;; this addition and keep their depth ceiling on purpose.
+
+(deftest walk-dispatches-once-per-collection-type
+  (is (= {:a 1 :b [2 3]} (coll/walk identity identity {:a 1 :b [2 3]})))
+  (is (= [2 4 6] (coll/walk #(* 2 %) identity [1 2 3])))
+  (is (= '(2 4 6) (coll/walk #(* 2 %) identity '(1 2 3))))
+  (is (= #{2 4 6} (coll/walk #(* 2 %) identity #{1 2 3})))
+  ;; outer runs after inner has touched every element
+  (is (= 6 (coll/walk identity count [1 2 3 4 5 6]))))
+
+(deftest prewalk-transforms-top-down-unbounded
+  (is (= {:a 2 :b [4 6]}
+         (coll/prewalk (fn [x] (if (number? x) (* x 2) x)) {:a 1 :b [2 3]})))
+  (is (= [1 2 3] (coll/prewalk identity [1 2 3])))
+  (is (= '(1 2 3) (coll/prewalk identity '(1 2 3))))
+  (is (= #{1 2 3} (coll/prewalk identity #{1 2 3})))
+  ;; a map's entries round-trip through walk/prewalk correctly (this is the
+  ;; map-entry special case in `walk` -- see its docstring)
+  (is (= {:a 1 :b 2} (coll/prewalk identity {:a 1 :b 2}))))
+
+(deftest postwalk-transforms-bottom-up-unbounded
+  (is (= {:a 2 :b [4 6]}
+         (coll/postwalk (fn [x] (if (number? x) (* x 2) x)) {:a 1 :b [2 3]})))
+  (is (= [1 2 3] (coll/postwalk identity [1 2 3])))
+  ;; postwalk visits children before the parent -- record every node f
+  ;; sees, in order, and prove the whole map is the LAST thing touched
+  ;; (only after every key, value, and reconstructed entry pair before it)
+  (let [seen (atom [])]
+    (coll/postwalk (fn [x] (swap! seen conj x) x) {:a 1 :b 2})
+    (let [order @seen]
+      (is (= 7 (count order)))
+      (is (= {:a 1 :b 2} (last order)))
+      ;; the two keys, two values, and two reconstructed [k v] entry pairs
+      ;; all precede it -- which of :a's vs :b's nodes come first is not
+      ;; asserted (map iteration order is not part of this contract)
+      (is (= #{:a :b 1 2 [:a 1] [:b 2]} (set (butlast order)))))))
+
+(deftest prewalk-replace-and-postwalk-replace
+  (is (= {:a 10 :b [10 3]} (coll/prewalk-replace {1 10 2 10} {:a 1 :b [2 3]})))
+  (is (= [:x :y :x] (coll/postwalk-replace {:a :x :b :y} [:a :b :a])))
+  ;; a replacement target absent from the form is simply never triggered
+  (is (= [1 2 3] (coll/prewalk-replace {99 :nope} [1 2 3]))))
+
+(deftest walk-family-genuinely-unbounded-unlike-bounded-walk
+  ;; A structure 50 levels deep. bounded-prewalk/-postwalk, given an
+  ;; explicit ceiling below that depth, correctly refuse it -- that
+  ;; ceiling-enforcement behavior is the entire, intentional point of the
+  ;; bounded-* variants and must not change.
+  (let [deep (reduce (fn [acc _] [acc]) 0 (range 50))]
+    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+                           #"bounded depth limit"
+                           (coll/bounded-prewalk identity 5 deep)))
+    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+                           #"bounded depth limit"
+                           (coll/bounded-postwalk identity 5 deep)))
+    ;; walk/prewalk/postwalk take no max-depth argument at all -- there is
+    ;; no ceiling to configure and no ceiling check to trip. The identical
+    ;; input that bounded-prewalk/-postwalk refuse above passes straight
+    ;; through unmodified.
+    (is (= deep (coll/prewalk identity deep)))
+    (is (= deep (coll/postwalk identity deep)))))

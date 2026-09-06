@@ -100,6 +100,128 @@
   ([s1 s2] (into (empty s1) (remove #(contains? s2 %)) s1))
   ([s1 s2 & sets] (reduce set-difference (set-difference s1 s2) sets)))
 
+;; -- Relational algebra (clojure.set gap-fill) -------------------------------
+;; Completes clojure.set coverage in this namespace: set-union/intersection/
+;; difference above already replace the pure set-algebra third of
+;; clojure.set; these functions replace the "relation" (a set of maps) third
+;; -- subset?/superset?, plus the select/project/rename/index/join family
+;; that clojure.set itself documents as operating on relations, not on sets
+;; of scalars. Semantics below are transcribed from clojure.set's own
+;; documented behavior, not reinvented -- each docstring names the upstream
+;; function it mirrors so a diff against real clojure.set is easy to check by
+;; hand. Pure data-structure operations; no #?() branching needed here (the
+;; `merge`/`select-keys`/`disj`/`conj` primitives they're built from are
+;; already host-neutral clojure.core).
+
+(defn subset?
+  "True if every element of set1 is also in set2. Mirrors
+  clojure.set/subset?. An empty set1 is a subset of any set2, including
+  another empty set."
+  [set1 set2]
+  (and (<= (count set1) (count set2))
+       (every? #(contains? set2 %) set1)))
+
+(defn superset?
+  "True if every element of set2 is also in set1. Mirrors
+  clojure.set/superset?."
+  [set1 set2]
+  (and (>= (count set1) (count set2))
+       (every? #(contains? set1 %) set2)))
+
+(defn select
+  "Return the subset of relation `xrel` (a set of maps) for which `pred` is
+  true. Mirrors clojure.set/select. `xrel` need not be a relation -- select
+  works over any set -- but is named `xrel` to match clojure.set's own
+  parameter name, since that is its primary use."
+  [pred xrel]
+  (reduce (fn [s k] (if (pred k) s (disj s k))) xrel xrel))
+
+(defn project
+  "Return a relation (set of maps) built from `xrel` by keeping only the
+  keys in `ks` of each map. Mirrors clojure.set/project. Maps that become
+  identical after projecting (because the dropped keys were the only
+  difference) collapse into one entry, since the result is a set."
+  [xrel ks]
+  (set (map #(select-keys % ks) xrel)))
+
+(defn rename-keys
+  "Return `m` with any key present in `kmap` renamed to that key's value in
+  `kmap`; keys of `m` absent from `kmap` are left as-is. Mirrors
+  clojure.set/rename-keys. Operates on a single map (not a relation) --
+  `rename` below is the relation-wide form."
+  [m kmap]
+  (reduce
+   (fn [out [old new]]
+     (if (contains? m old)
+       (assoc out new (get m old))
+       out))
+   (apply dissoc m (keys kmap))
+   kmap))
+
+(defn rename
+  "Return a relation (set of maps) built from `xrel` by applying
+  `rename-keys` with `kmap` to every map in it. Mirrors clojure.set/rename."
+  [xrel kmap]
+  (set (map #(rename-keys % kmap) xrel)))
+
+(defn index
+  "Return a map from the distinct values of `ks` (as a map holding just
+  those keys) to the set of maps in relation `xrel` that have those values.
+  Mirrors clojure.set/index."
+  [xrel ks]
+  (reduce
+   (fn [m x]
+     (let [ik (select-keys x ks)]
+       (assoc m ik (conj (get m ik #{}) x))))
+   {} xrel))
+
+(defn- invert-map
+  "Return `m` with each value mapped back to its key. Later entries win on a
+  value collision. Private: mirrors clojure.set/map-invert but is not
+  exported, since it is only needed here to implement the 3-arg `join`
+  below and this namespace does not otherwise claim clojure.set/map-invert
+  coverage."
+  [m]
+  (reduce (fn [out [k v]] (assoc out v k)) {} m))
+
+(defn join
+  "Join two relations (sets of maps).
+
+  2-arg form -- natural join: joins `xrel` and `yrel` on every key name
+  they have in common, keeping rows where the values at those keys match.
+  Returns the empty set if either relation is empty (there is nothing to
+  match against, not an error).
+
+  3-arg form -- explicit-mapping join: `km` is a map of {xrel-key
+  yrel-key}, naming which key of `xrel` corresponds to which key of `yrel`
+  when the two relations don't share key names (or share a name that
+  doesn't mean the same column).
+
+  Mirrors clojure.set/join exactly, including which relation gets indexed
+  (the smaller one, by count) -- an implementation-detail optimization that
+  does not affect the result, only performance."
+  ([xrel yrel]
+   (if (and (seq xrel) (seq yrel))
+     (let [ks (set-intersection (set (keys (first xrel))) (set (keys (first yrel))))
+           [r s] (if (<= (count xrel) (count yrel)) [xrel yrel] [yrel xrel])
+           idx (index r ks)]
+       (reduce (fn [ret x]
+                 (if-let [found (idx (select-keys x ks))]
+                   (reduce #(conj %1 (clojure.core/merge %2 x)) ret found)
+                   ret))
+               #{} s))
+     #{}))
+  ([xrel yrel km]
+   (let [[r s k] (if (<= (count xrel) (count yrel))
+                   [xrel yrel (invert-map km)]
+                   [yrel xrel km])
+         idx (index r (vals k))]
+     (reduce (fn [ret x]
+               (if-let [found (idx (rename-keys (select-keys x (keys k)) k))]
+                 (reduce #(conj %1 (clojure.core/merge %2 x)) ret found)
+                 ret))
+             #{} s))))
+
 ;; -- Bounded walk -------------------------------------------------------
 ;; Replaces clojure.walk/prewalk|postwalk in the frontier
 ;; (:collection-walk-set, forbidden [:unbounded-recursion]). Unlike
@@ -147,3 +269,93 @@
              (when (> depth max-depth) (walk-depth-exceeded! max-depth))
              (f (walk-children walk x (inc depth))))]
      (walk form 0))))
+
+;; -- Unbounded walk (real clojure.walk) --------------------------------------
+;;
+;; !!!! READ THIS BEFORE "FIXING" bounded-prewalk/bounded-postwalk ABOVE !!!!
+;;
+;; bounded-prewalk/bounded-postwalk above are INTENTIONALLY depth-bounded --
+;; that bound is a real, deliberate semantic divergence from clojure.walk
+;; (see their docstrings and migration/bounded-coll-v1.edn), not a bug and
+;; not a gap to be quietly closed. An estimated 106 existing call sites in
+;; this workspace (adr-2809061500-clojure-namespace-to-kotoba-stdlib) may
+;; depend on that bound as an actual safety property -- e.g. rejecting a
+;; cyclical or adversarial input with a catchable ex-info instead of
+;; exhausting the stack. Silently widening bounded-prewalk/bounded-postwalk
+;; to be unbounded would change that safety property out from under every
+;; caller that added the bound on purpose, without them touching a line of
+;; their own code.
+;;
+;; walk/prewalk/postwalk/prewalk-replace/postwalk-replace below are a
+;; SEPARATE, NEW set of functions that exist for callers who need genuine
+;; clojure.walk-equivalent unbounded semantics (e.g. transforming a
+;; document/AST of unknown, unbounded depth where no artificial ceiling is
+;; correct). They are not a replacement for bounded-*, and bounded-* is not
+;; a restricted version of them to be "corrected" back to matching. Both
+;; pairs are permanent, parallel API surface:
+;;
+;;   bounded-prewalk / bounded-postwalk  -- depth-capped, throws past the cap
+;;   walk / prewalk / postwalk           -- uncapped, matches real clojure.walk
+;;
+;; If you are reading this because you noticed the two pairs disagree and
+;; are tempted to make bounded-* match walk/prewalk/postwalk (or vice
+;; versa): don't. That disagreement is the entire point of this section
+;; existing. Add a new function, or take the bound as an explicit argument
+;; at the call site (bounded-prewalk/-postwalk already accept a max-depth
+;; override) -- do not change what either name means.
+;;
+;; Semantics (walk's cond order, the map-entry/record special cases, prewalk
+;; = top-down, postwalk = bottom-up) are transcribed from clojure.walk, not
+;; reinvented. One documented representational difference: a walked
+;; map-entry is reconstructed here as a plain 2-element vector rather than
+;; the host's native map-entry object (clojure.lang.MapEntry on :clj, a
+;; MapEntry record on :cljs). This is NOT a behavior divergence for any
+;; normal use -- `(= (first {:a 1}) [:a 1])` is true in both Clojure and
+;; ClojureScript (a map entry is `Sequential` and compares by value against
+;; a vector of the same two elements), and a plain 2-element vector conj's
+;; onto a map exactly like a real map-entry does. It is only observable via
+;; a type-check like `(instance? clojure.lang.MapEntry ...)`, which this
+;; library does not attempt to reproduce.
+
+(defn walk
+  "The most general tree walker: recursively applies `inner` to each
+  element of `form`, then applies `outer` to the result. Mirrors
+  clojure.walk/walk, unbounded (no depth ceiling -- see the section header
+  above). `prewalk`/`postwalk` below are the usual entry points; use `walk`
+  directly only when you need a different inner/outer split than either."
+  [inner outer form]
+  (cond
+    (list? form) (outer (apply list (map inner form)))
+    (map-entry? form) (outer [(inner (key form)) (inner (val form))])
+    (seq? form) (outer (doall (map inner form)))
+    (record? form) (outer (reduce (fn [r x] (conj r (inner x))) form form))
+    (coll? form) (outer (into (empty form) (map inner form)))
+    :else (outer form)))
+
+(defn prewalk
+  "Like `walk`, but apply `f` to `form` and then to its children,
+  recursively, top-down (f runs on a node before it runs on that node's
+  children). Mirrors clojure.walk/prewalk, unbounded."
+  [f form]
+  (walk (partial prewalk f) identity (f form)))
+
+(defn postwalk
+  "Like `walk`, but apply `f` to `form`'s children first, then to `form`
+  itself, recursively, bottom-up (f runs on a node's children before it
+  runs on that node). Mirrors clojure.walk/postwalk, unbounded."
+  [f form]
+  (walk (partial postwalk f) f form))
+
+(defn prewalk-replace
+  "Recursively transform `form` by replacing every node that is a key in
+  `replacements` with that key's value, top-down. Mirrors
+  clojure.walk/prewalk-replace."
+  [replacements form]
+  (prewalk (fn [x] (if (contains? replacements x) (get replacements x) x)) form))
+
+(defn postwalk-replace
+  "Recursively transform `form` by replacing every node that is a key in
+  `replacements` with that key's value, bottom-up. Mirrors
+  clojure.walk/postwalk-replace."
+  [replacements form]
+  (postwalk (fn [x] (if (contains? replacements x) (get replacements x) x)) form))
