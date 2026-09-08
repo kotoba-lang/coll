@@ -359,3 +359,55 @@
   clojure.walk/postwalk-replace."
   [replacements form]
   (postwalk (fn [x] (if (contains? replacements x) (get replacements x) x)) form))
+
+;; -- Key coercion (clojure.walk's keywordize-keys / stringify-keys) ----------
+;;
+;; These are the two clojure.walk entry points that are NOT walk generics:
+;; they are specific map-key coercions built on postwalk. They are here rather
+;; than in a caller because every JSON/YAML/query-string boundary in this
+;; workspace re-rolls them, and each hand-rolled copy tends to differ on the
+;; two cases below.
+;;
+;; Two behaviours transcribed from clojure.walk that are easy to get wrong and
+;; that the tests pin:
+;;
+;;   1. Only STRING keys are keywordized, and only KEYWORD keys are
+;;      stringified. Every other key type (number, vector, symbol, nil) passes
+;;      through untouched. A hand-rolled `(map-keys keyword m)` does not do
+;;      this -- it would coerce a number key too.
+;;
+;;   2. `stringify-keys` uses `name`, so it DROPS a keyword's namespace:
+;;      `:a/b` becomes `"b"`, not `"a/b"`. That is lossy and it is not
+;;      round-trippable through `keywordize-keys` (`"b"` comes back as `:b`).
+;;      This is clojure.walk's actual behaviour, so it is what a call site
+;;      being migrated off clojure.walk depends on; do not "fix" it here.
+;;      A caller who needs the namespace preserved wants
+;;      `(map-keys #(if (keyword? %) (subs (str %) 1) %) m)`, not this.
+;;
+;; Both rebuild each map with `(into {} ...)`, like clojure.walk: a sorted-map
+;; or a record in the input comes back as a plain map. Unbounded, matching the
+;; walk/prewalk/postwalk pair above rather than the bounded-* pair.
+
+(defn keywordize-keys
+  "Recursively transform all string map keys in `form` into keywords, leaving
+  keys of every other type untouched. Mirrors clojure.walk/keywordize-keys,
+  unbounded.
+
+  `(keywordize-keys {\"a\" {\"b\" 1} 2 3}) => {:a {:b 1} 2 3}`"
+  [form]
+  (let [coerce (fn [[k v]] (if (string? k) [(keyword k) v] [k v]))]
+    (postwalk (fn [x] (if (map? x) (into {} (map coerce) x) x)) form)))
+
+(defn stringify-keys
+  "Recursively transform all keyword map keys in `form` into strings, leaving
+  keys of every other type untouched. Mirrors clojure.walk/stringify-keys,
+  unbounded.
+
+  Uses `name`, so a namespaced keyword loses its namespace: `:a/b` => `\"b\"`.
+  See the section comment above -- that loss is clojure.walk's behaviour and
+  is deliberate here.
+
+  `(stringify-keys {:a {:b 1} 2 3}) => {\"a\" {\"b\" 1} 2 3}`"
+  [form]
+  (let [coerce (fn [[k v]] (if (keyword? k) [(name k) v] [k v]))]
+    (postwalk (fn [x] (if (map? x) (into {} (map coerce) x) x)) form)))
