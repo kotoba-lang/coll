@@ -265,3 +265,59 @@
     ;; through unmodified.
     (is (= deep (coll/prewalk identity deep)))
     (is (= deep (coll/postwalk identity deep)))))
+
+;; -- keywordize-keys / stringify-keys ---------------------------------------
+;;
+;; Each test below is written so that a plausible WRONG implementation fails
+;; it. A `(map-keys keyword m)` one-liner passes the happy path and fails
+;; `key-coercion-touches-only-its-own-key-type`; an implementation that
+;; forgot to recurse passes that one and fails the nested test.
+
+(deftest keywordize-keys-recurses-through-nested-collections
+  (is (= {:a 1} (coll/keywordize-keys {"a" 1})))
+  (is (= {:a {:b {:c 1}}} (coll/keywordize-keys {"a" {"b" {"c" 1}}})))
+  ;; maps reached through a vector/list/set are walked too
+  (is (= {:a [{:b 1} {:c 2}]} (coll/keywordize-keys {"a" [{"b" 1} {"c" 2}]})))
+  (is (= [{:a 1}] (coll/keywordize-keys [{"a" 1}])))
+  ;; values are never touched, only keys
+  (is (= {:a "b"} (coll/keywordize-keys {"a" "b"}))))
+
+(deftest stringify-keys-recurses-through-nested-collections
+  (is (= {"a" 1} (coll/stringify-keys {:a 1})))
+  (is (= {"a" {"b" {"c" 1}}} (coll/stringify-keys {:a {:b {:c 1}}})))
+  (is (= {"a" [{"b" 1}]} (coll/stringify-keys {:a [{:b 1}]})))
+  ;; a keyword VALUE stays a keyword; only keys are coerced
+  (is (= {"a" :b} (coll/stringify-keys {:a :b}))))
+
+(deftest key-coercion-touches-only-its-own-key-type
+  ;; The discriminating case: a map whose keys are of several types at once.
+  ;; Only the string keys keywordize and only the keyword keys stringify;
+  ;; numbers, vectors and symbols are left exactly as they were.
+  (let [mixed {"s" 1 :k 2 3 :three [4] :vec 'sym :sym nil :nil}]
+    (is (= {:s 1 :k 2 3 :three [4] :vec 'sym :sym nil :nil}
+           (coll/keywordize-keys mixed)))
+    (is (= {"s" 1 "k" 2 3 :three [4] :vec 'sym :sym nil :nil}
+           (coll/stringify-keys mixed)))))
+
+(deftest stringify-keys-drops-the-namespace-and-is-not-round-trippable
+  ;; Pinned deliberately: this is clojure.walk's behaviour, so a call site
+  ;; migrating off clojure.walk gets the same answer. If a later change makes
+  ;; stringify-keys namespace-preserving, this test must fail loudly rather
+  ;; than that change landing silently under callers who depend on the loss.
+  (is (= {"b" 1} (coll/stringify-keys {:a/b 1})))
+  (is (not= {:a/b 1} (-> {:a/b 1} coll/stringify-keys coll/keywordize-keys)))
+  (is (= {:b 1} (-> {:a/b 1} coll/stringify-keys coll/keywordize-keys)))
+  ;; an unqualified keyword IS round-trippable -- the boundary between the
+  ;; two cases is exactly "does the keyword have a namespace"
+  (is (= {:b 1} (-> {:b 1} coll/stringify-keys coll/keywordize-keys))))
+
+(deftest key-coercion-identity-on-empty-and-non-map-input
+  ;; The "no input" case (question 1 of the 8): an empty map and a non-map
+  ;; must not report success by doing nothing to something they should have
+  ;; changed -- there is nothing to change, and they must not throw either.
+  (is (= {} (coll/keywordize-keys {})))
+  (is (= {} (coll/stringify-keys {})))
+  (is (= [] (coll/keywordize-keys [])))
+  (is (= 42 (coll/keywordize-keys 42)))
+  (is (= "a" (coll/stringify-keys "a")))
+  (is (nil? (coll/keywordize-keys nil))))
