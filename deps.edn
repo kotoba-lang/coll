@@ -4,7 +4,91 @@
  ;; Zero third-party runtime deps; every namespace .cljc
  ;; (JVM / SCI / ClojureScript / GraalVM / kotoba-WASM).
  ;; See ADR-kotoba-lang-foundational-stdlib.md.
- :deps {}
+ :deps {
+        io.github.kotoba-lang/coll-assoc-some
+        {:git/url "https://github.com/kotoba-lang/coll-assoc-some.git"
+         :git/sha "f4e776f518d0bf65c5a40e55b43143f819ae17c5"}
+        io.github.kotoba-lang/coll-bounded-postwalk
+        {:git/url "https://github.com/kotoba-lang/coll-bounded-postwalk.git"
+         :git/sha "334402043a1a6d1cbc730d51f6b1585625f97b03"}
+        io.github.kotoba-lang/coll-bounded-prewalk
+        {:git/url "https://github.com/kotoba-lang/coll-bounded-prewalk.git"
+         :git/sha "d8c584848386b53ab14feff5cf05cd4bbda053f0"}
+        io.github.kotoba-lang/coll-deep-merge
+        {:git/url "https://github.com/kotoba-lang/coll-deep-merge.git"
+         :git/sha "98b967e5cca849a3bef22d2348cc2c36d0064e3a"}
+        io.github.kotoba-lang/coll-default-max-walk-depth
+        {:git/url "https://github.com/kotoba-lang/coll-default-max-walk-depth.git"
+         :git/sha "ecb72a2102c7500d6e63d13940e064a2d09b0fb2"}
+        io.github.kotoba-lang/coll-filter-keys
+        {:git/url "https://github.com/kotoba-lang/coll-filter-keys.git"
+         :git/sha "dc0fbdbf9eedf15f752621ae6cc5e44a423a410d"}
+        io.github.kotoba-lang/coll-filter-vals
+        {:git/url "https://github.com/kotoba-lang/coll-filter-vals.git"
+         :git/sha "6f995abd3a4ed8c46892f9358cc5037470901306"}
+        io.github.kotoba-lang/coll-index
+        {:git/url "https://github.com/kotoba-lang/coll-index.git"
+         :git/sha "2bd9fd3b4f14aec90ea6d02f1dd55a5eb214ded8"}
+        io.github.kotoba-lang/coll-index-by
+        {:git/url "https://github.com/kotoba-lang/coll-index-by.git"
+         :git/sha "5426988963e4c82529dcecfb92c14369bda969e0"}
+        io.github.kotoba-lang/coll-join
+        {:git/url "https://github.com/kotoba-lang/coll-join.git"
+         :git/sha "0ca264b06d90ec3034ef87ff05235d2fc7bcf8cf"}
+        io.github.kotoba-lang/coll-keywordize-keys
+        {:git/url "https://github.com/kotoba-lang/coll-keywordize-keys.git"
+         :git/sha "e9ca94a18049883ceee8130defb4d95f88ff8664"}
+        io.github.kotoba-lang/coll-map-keys
+        {:git/url "https://github.com/kotoba-lang/coll-map-keys.git"
+         :git/sha "fcb7100de91107cee3b567461f02ce1a8510dc33"}
+        io.github.kotoba-lang/coll-map-vals
+        {:git/url "https://github.com/kotoba-lang/coll-map-vals.git"
+         :git/sha "f484280e5e966bbaa7b9801db49e4cb9e1b6cbb6"}
+        io.github.kotoba-lang/coll-postwalk
+        {:git/url "https://github.com/kotoba-lang/coll-postwalk.git"
+         :git/sha "f411a03b09cef16a70ef425fbf1177df0e2f860a"}
+        io.github.kotoba-lang/coll-postwalk-replace
+        {:git/url "https://github.com/kotoba-lang/coll-postwalk-replace.git"
+         :git/sha "aea6074560d06efd70e120eb8c16201790f497fb"}
+        io.github.kotoba-lang/coll-prewalk
+        {:git/url "https://github.com/kotoba-lang/coll-prewalk.git"
+         :git/sha "5a83a6405f07e91b75bab41aa2db9ad8b665aed0"}
+        io.github.kotoba-lang/coll-prewalk-replace
+        {:git/url "https://github.com/kotoba-lang/coll-prewalk-replace.git"
+         :git/sha "52645acb587d8e63bad4fb1af47abbed92bb19a3"}
+        io.github.kotoba-lang/coll-project
+        {:git/url "https://github.com/kotoba-lang/coll-project.git"
+         :git/sha "273761370417e3c83abe608d86873d4ca6488bbc"}
+        io.github.kotoba-lang/coll-rename
+        {:git/url "https://github.com/kotoba-lang/coll-rename.git"
+         :git/sha "e27fc439f9f8ecf5656aba98edf74bda2f30fa2e"}
+        io.github.kotoba-lang/coll-rename-keys
+        {:git/url "https://github.com/kotoba-lang/coll-rename-keys.git"
+         :git/sha "8dd3ed02eba54465a5e8670b1a18e28d0995e265"}
+        io.github.kotoba-lang/coll-select
+        {:git/url "https://github.com/kotoba-lang/coll-select.git"
+         :git/sha "d4e49c0945fcf9959f1f4b39e23b373b95e03084"}
+        io.github.kotoba-lang/coll-set-difference
+        {:git/url "https://github.com/kotoba-lang/coll-set-difference.git"
+         :git/sha "2d308ef64cdd286780ea4f3611d5c32f6413a631"}
+        io.github.kotoba-lang/coll-set-intersection
+        {:git/url "https://github.com/kotoba-lang/coll-set-intersection.git"
+         :git/sha "af1b179354bd3c37ff107cff862c8580238d491d"}
+        io.github.kotoba-lang/coll-set-union
+        {:git/url "https://github.com/kotoba-lang/coll-set-union.git"
+         :git/sha "8941b33c9f058f91d4d4d97d99c02273a111b87c"}
+        io.github.kotoba-lang/coll-stringify-keys
+        {:git/url "https://github.com/kotoba-lang/coll-stringify-keys.git"
+         :git/sha "44cdbf06d7d84d511710e658c739514ed3d1a7ce"}
+        io.github.kotoba-lang/coll-subset
+        {:git/url "https://github.com/kotoba-lang/coll-subset.git"
+         :git/sha "dbb2007c29b7cfc8e857f57cae624de58539e68d"}
+        io.github.kotoba-lang/coll-superset
+        {:git/url "https://github.com/kotoba-lang/coll-superset.git"
+         :git/sha "86c0203c456e3114b42440d9b1bfdc443f4f4a0c"}
+        io.github.kotoba-lang/coll-walk
+        {:git/url "https://github.com/kotoba-lang/coll-walk.git"
+         :git/sha "3607b1f5a04dcd8e8d4553ea35d3267984b1556b"}}
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
