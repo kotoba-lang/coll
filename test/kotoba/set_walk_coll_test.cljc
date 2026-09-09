@@ -1,5 +1,7 @@
-(ns kotoba.coll-test
+(ns kotoba.set-walk-coll-test
   (:require [clojure.test :refer [deftest is testing]]
+            [kotoba.set :as set]
+            [kotoba.walk :as walk]
             [kotoba.coll :as coll]))
 
 (deftest map-vals-and-keys
@@ -56,52 +58,52 @@
   (is (= {} (coll/map-keys name {}))))
 
 (deftest set-union-variadic
-  (is (= #{} (coll/set-union)))
-  (is (= #{1 2} (coll/set-union #{1 2})))
-  (is (= #{1 2 3} (coll/set-union #{1 2} #{2 3})))
-  (is (= #{1 2 3 4} (coll/set-union #{1} #{2} #{3} #{4})))
-  (is (= #{} (coll/set-union #{} #{}))))
+  (is (= #{} (set/union)))
+  (is (= #{1 2} (set/union #{1 2})))
+  (is (= #{1 2 3} (set/union #{1 2} #{2 3})))
+  (is (= #{1 2 3 4} (set/union #{1} #{2} #{3} #{4})))
+  (is (= #{} (set/union #{} #{}))))
 
 (deftest set-intersection-variadic
-  (is (= #{2} (coll/set-intersection #{1 2} #{2 3})))
-  (is (= #{} (coll/set-intersection #{1} #{2})))
-  (is (= #{2} (coll/set-intersection #{1 2 3} #{2 3 4} #{2 5})))
-  (is (= #{1 2} (coll/set-intersection #{1 2}))))
+  (is (= #{2} (set/intersection #{1 2} #{2 3})))
+  (is (= #{} (set/intersection #{1} #{2})))
+  (is (= #{2} (set/intersection #{1 2 3} #{2 3 4} #{2 5})))
+  (is (= #{1 2} (set/intersection #{1 2}))))
 
 (deftest set-difference-variadic
-  (is (= #{1} (coll/set-difference #{1 2} #{2 3})))
-  (is (= #{1 2} (coll/set-difference #{1 2} #{3})))
-  (is (= #{1} (coll/set-difference #{1 2 3} #{2} #{3})))
-  (is (= #{1 2} (coll/set-difference #{1 2}))))
+  (is (= #{1} (set/difference #{1 2} #{2 3})))
+  (is (= #{1 2} (set/difference #{1 2} #{3})))
+  (is (= #{1} (set/difference #{1 2 3} #{2} #{3})))
+  (is (= #{1 2} (set/difference #{1 2}))))
 
 (deftest bounded-prewalk-transforms-top-down
   ;; every number doubled, top-down traversal order does not affect this
   ;; particular transform's result but does affect side-effecting order
   (is (= {:a 2 :b [4 6]}
-         (coll/bounded-prewalk (fn [x] (if (number? x) (* x 2) x))
+         (walk/bounded-prewalk (fn [x] (if (number? x) (* x 2) x))
                                 {:a 1 :b [2 3]})))
-  (is (= [1 2 3] (coll/bounded-prewalk identity [1 2 3])))
-  (is (= '(1 2 3) (coll/bounded-prewalk identity '(1 2 3))))
-  (is (= #{1 2 3} (coll/bounded-prewalk identity #{1 2 3}))))
+  (is (= [1 2 3] (walk/bounded-prewalk identity [1 2 3])))
+  (is (= '(1 2 3) (walk/bounded-prewalk identity '(1 2 3))))
+  (is (= #{1 2 3} (walk/bounded-prewalk identity #{1 2 3}))))
 
 (deftest bounded-postwalk-transforms-bottom-up
   (is (= {:a 2 :b [4 6]}
-         (coll/bounded-postwalk (fn [x] (if (number? x) (* x 2) x))
+         (walk/bounded-postwalk (fn [x] (if (number? x) (* x 2) x))
                                  {:a 1 :b [2 3]})))
-  (is (= [1 2 3] (coll/bounded-postwalk identity [1 2 3]))))
+  (is (= [1 2 3] (walk/bounded-postwalk identity [1 2 3]))))
 
 (deftest bounded-walk-rejects-past-depth-limit
   (let [deep (reduce (fn [acc _] {:n acc}) 0 (range 5))]
     ;; depth 0 is the root map itself; five nested maps need depth >= 5
     (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                            #"bounded depth limit"
-                           (coll/bounded-prewalk identity 2 deep)))
+                           (walk/bounded-prewalk identity 2 deep)))
     (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                            #"bounded depth limit"
-                           (coll/bounded-postwalk identity 2 deep)))
+                           (walk/bounded-postwalk identity 2 deep)))
     ;; a depth ceiling that fits does not throw
-    (is (= deep (coll/bounded-prewalk identity 10 deep)))
-    (is (= deep (coll/bounded-postwalk identity 10 deep)))))
+    (is (= deep (walk/bounded-prewalk identity 10 deep)))
+    (is (= deep (walk/bounded-postwalk identity 10 deep)))))
 
 ;; ---------------------------------------------------------------------------
 ;; clojure.set gap-fill: subset?/superset?/select/project/rename(-keys)/
@@ -111,17 +113,17 @@
 ;; by hand and is checked against a concrete expected set/map.
 
 (deftest subset-and-superset
-  (is (true? (coll/subset? #{1 2} #{1 2 3})))
-  (is (true? (coll/subset? #{} #{1})))
-  (is (true? (coll/subset? #{} #{})))
-  (is (true? (coll/subset? #{1 2 3} #{1 2 3})))
-  (is (false? (coll/subset? #{1 2 3} #{1 2})))
-  (is (false? (coll/subset? #{4} #{1 2 3})))
-  (is (true? (coll/superset? #{1 2 3} #{1 2})))
-  (is (true? (coll/superset? #{1} #{})))
-  (is (true? (coll/superset? #{1 2 3} #{1 2 3})))
-  (is (false? (coll/superset? #{1} #{1 2})))
-  (is (false? (coll/superset? #{1 2 3} #{4}))))
+  (is (true? (set/subset? #{1 2} #{1 2 3})))
+  (is (true? (set/subset? #{} #{1})))
+  (is (true? (set/subset? #{} #{})))
+  (is (true? (set/subset? #{1 2 3} #{1 2 3})))
+  (is (false? (set/subset? #{1 2 3} #{1 2})))
+  (is (false? (set/subset? #{4} #{1 2 3})))
+  (is (true? (set/superset? #{1 2 3} #{1 2})))
+  (is (true? (set/superset? #{1} #{})))
+  (is (true? (set/superset? #{1 2 3} #{1 2 3})))
+  (is (false? (set/superset? #{1} #{1 2})))
+  (is (false? (set/superset? #{1 2 3} #{4}))))
 
 (def ^:private people
   "Test relation: a set of maps sharing an :id/:name/:dept schema."
@@ -137,51 +139,51 @@
 (deftest select-filters-a-relation
   (is (= #{{:id 1 :name "Alice" :dept "eng"}
            {:id 2 :name "Bob" :dept "eng"}}
-         (coll/select #(= "eng" (:dept %)) people)))
-  (is (= #{} (coll/select (constantly false) people)))
-  (is (= people (coll/select (constantly true) people))))
+         (set/select #(= "eng" (:dept %)) people)))
+  (is (= #{} (set/select (constantly false) people)))
+  (is (= people (set/select (constantly true) people))))
 
 (deftest project-keeps-only-named-keys
   (is (= #{{:id 1 :name "Alice"} {:id 2 :name "Bob"} {:id 3 :name "Cara"}}
-         (coll/project people [:id :name])))
+         (set/project people [:id :name])))
   ;; projecting away every differentiating key collapses duplicates -- the
   ;; result is a set, per clojure.set/project
-  (is (= #{{:dept "eng"} {:dept "sales"}} (coll/project people [:dept])))
-  (is (= #{{}} (coll/project people []))))
+  (is (= #{{:dept "eng"} {:dept "sales"}} (set/project people [:dept])))
+  (is (= #{{}} (set/project people []))))
 
 (deftest rename-keys-renames-a-single-map
-  (is (= {:id 1 :full-name "Alice"} (coll/rename-keys {:id 1 :name "Alice"} {:name :full-name})))
+  (is (= {:id 1 :full-name "Alice"} (set/rename-keys {:id 1 :name "Alice"} {:name :full-name})))
   ;; a kmap key absent from the map is a no-op for that entry
-  (is (= {:id 1 :name "Alice"} (coll/rename-keys {:id 1 :name "Alice"} {:missing :x})))
-  (is (= {} (coll/rename-keys {} {:a :b}))))
+  (is (= {:id 1 :name "Alice"} (set/rename-keys {:id 1 :name "Alice"} {:missing :x})))
+  (is (= {} (set/rename-keys {} {:a :b}))))
 
 (deftest rename-applies-rename-keys-across-a-relation
   (is (= #{{:id 1 :dept "eng" :full-name "Alice"}
            {:id 2 :dept "eng" :full-name "Bob"}
            {:id 3 :dept "sales" :full-name "Cara"}}
-         (coll/rename people {:name :full-name}))))
+         (set/rename people {:name :full-name}))))
 
 (deftest index-groups-by-key-values
   (is (= {{:dept "eng"} #{{:id 1 :name "Alice" :dept "eng"}
                           {:id 2 :name "Bob" :dept "eng"}}
           {:dept "sales"} #{{:id 3 :name "Cara" :dept "sales"}}}
-         (coll/index people [:dept])))
-  (is (= {} (coll/index #{} [:dept]))))
+         (set/index people [:dept])))
+  (is (= {} (set/index #{} [:dept]))))
 
 (deftest join-natural-join-on-shared-key
   (is (= #{{:id 1 :name "Alice" :dept "eng" :manager "Dana"}
            {:id 2 :name "Bob" :dept "eng" :manager "Dana"}
            {:id 3 :name "Cara" :dept "sales" :manager "Erin"}}
-         (coll/join people depts)))
+         (set/join people depts)))
   ;; either side empty -> empty result, not an error
-  (is (= #{} (coll/join #{} depts)))
-  (is (= #{} (coll/join people #{})))
+  (is (= #{} (set/join #{} depts)))
+  (is (= #{} (set/join people #{})))
   ;; the well-known clojure.set doc example (compositions/composers),
   ;; independently hand-verified, as a second natural-join fixture
   (is (= #{{:name "Art of Fugue" :composer "Bach" :country "Germany"}
            {:name "Musical Offering" :composer "Bach" :country "Germany"}
            {:name "Requiem" :composer "Verdi" :country "Italy"}}
-         (coll/join #{{:name "Art of Fugue" :composer "Bach"}
+         (set/join #{{:name "Art of Fugue" :composer "Bach"}
                       {:name "Musical Offering" :composer "Bach"}
                       {:name "Requiem" :composer "Verdi"}}
                     #{{:composer "Bach" :country "Germany"}
@@ -194,10 +196,10 @@
                     {:id 11 :name "Bob"}}]
     (is (= #{{:order-id 1 :cust-id 10 :amount 100 :id 10 :name "Alice"}
              {:order-id 2 :cust-id 11 :amount 200 :id 11 :name "Bob"}}
-           (coll/join orders customers {:cust-id :id})))
+           (set/join orders customers {:cust-id :id})))
     ;; unmatched rows on either side are dropped, not nil-padded
     (is (= #{{:order-id 1 :cust-id 10 :amount 100 :id 10 :name "Alice"}}
-           (coll/join orders #{{:id 10 :name "Alice"}} {:cust-id :id})))))
+           (set/join orders #{{:id 10 :name "Alice"}} {:cust-id :id})))))
 
 ;; ---------------------------------------------------------------------------
 ;; clojure.walk gap-fill: walk/prewalk/postwalk/prewalk-replace/
@@ -207,32 +209,32 @@
 ;; this addition and keep their depth ceiling on purpose.
 
 (deftest walk-dispatches-once-per-collection-type
-  (is (= {:a 1 :b [2 3]} (coll/walk identity identity {:a 1 :b [2 3]})))
-  (is (= [2 4 6] (coll/walk #(* 2 %) identity [1 2 3])))
-  (is (= '(2 4 6) (coll/walk #(* 2 %) identity '(1 2 3))))
-  (is (= #{2 4 6} (coll/walk #(* 2 %) identity #{1 2 3})))
+  (is (= {:a 1 :b [2 3]} (walk/walk identity identity {:a 1 :b [2 3]})))
+  (is (= [2 4 6] (walk/walk #(* 2 %) identity [1 2 3])))
+  (is (= '(2 4 6) (walk/walk #(* 2 %) identity '(1 2 3))))
+  (is (= #{2 4 6} (walk/walk #(* 2 %) identity #{1 2 3})))
   ;; outer runs after inner has touched every element
-  (is (= 6 (coll/walk identity count [1 2 3 4 5 6]))))
+  (is (= 6 (walk/walk identity count [1 2 3 4 5 6]))))
 
 (deftest prewalk-transforms-top-down-unbounded
   (is (= {:a 2 :b [4 6]}
-         (coll/prewalk (fn [x] (if (number? x) (* x 2) x)) {:a 1 :b [2 3]})))
-  (is (= [1 2 3] (coll/prewalk identity [1 2 3])))
-  (is (= '(1 2 3) (coll/prewalk identity '(1 2 3))))
-  (is (= #{1 2 3} (coll/prewalk identity #{1 2 3})))
+         (walk/prewalk (fn [x] (if (number? x) (* x 2) x)) {:a 1 :b [2 3]})))
+  (is (= [1 2 3] (walk/prewalk identity [1 2 3])))
+  (is (= '(1 2 3) (walk/prewalk identity '(1 2 3))))
+  (is (= #{1 2 3} (walk/prewalk identity #{1 2 3})))
   ;; a map's entries round-trip through walk/prewalk correctly (this is the
   ;; map-entry special case in `walk` -- see its docstring)
-  (is (= {:a 1 :b 2} (coll/prewalk identity {:a 1 :b 2}))))
+  (is (= {:a 1 :b 2} (walk/prewalk identity {:a 1 :b 2}))))
 
 (deftest postwalk-transforms-bottom-up-unbounded
   (is (= {:a 2 :b [4 6]}
-         (coll/postwalk (fn [x] (if (number? x) (* x 2) x)) {:a 1 :b [2 3]})))
-  (is (= [1 2 3] (coll/postwalk identity [1 2 3])))
+         (walk/postwalk (fn [x] (if (number? x) (* x 2) x)) {:a 1 :b [2 3]})))
+  (is (= [1 2 3] (walk/postwalk identity [1 2 3])))
   ;; postwalk visits children before the parent -- record every node f
   ;; sees, in order, and prove the whole map is the LAST thing touched
   ;; (only after every key, value, and reconstructed entry pair before it)
   (let [seen (atom [])]
-    (coll/postwalk (fn [x] (swap! seen conj x) x) {:a 1 :b 2})
+    (walk/postwalk (fn [x] (swap! seen conj x) x) {:a 1 :b 2})
     (let [order @seen]
       (is (= 7 (count order)))
       (is (= {:a 1 :b 2} (last order)))
@@ -242,10 +244,10 @@
       (is (= #{:a :b 1 2 [:a 1] [:b 2]} (set (butlast order)))))))
 
 (deftest prewalk-replace-and-postwalk-replace
-  (is (= {:a 10 :b [10 3]} (coll/prewalk-replace {1 10 2 10} {:a 1 :b [2 3]})))
-  (is (= [:x :y :x] (coll/postwalk-replace {:a :x :b :y} [:a :b :a])))
+  (is (= {:a 10 :b [10 3]} (walk/prewalk-replace {1 10 2 10} {:a 1 :b [2 3]})))
+  (is (= [:x :y :x] (walk/postwalk-replace {:a :x :b :y} [:a :b :a])))
   ;; a replacement target absent from the form is simply never triggered
-  (is (= [1 2 3] (coll/prewalk-replace {99 :nope} [1 2 3]))))
+  (is (= [1 2 3] (walk/prewalk-replace {99 :nope} [1 2 3]))))
 
 (deftest walk-family-genuinely-unbounded-unlike-bounded-walk
   ;; A structure 50 levels deep. bounded-prewalk/-postwalk, given an
@@ -255,16 +257,16 @@
   (let [deep (reduce (fn [acc _] [acc]) 0 (range 50))]
     (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                            #"bounded depth limit"
-                           (coll/bounded-prewalk identity 5 deep)))
+                           (walk/bounded-prewalk identity 5 deep)))
     (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                            #"bounded depth limit"
-                           (coll/bounded-postwalk identity 5 deep)))
+                           (walk/bounded-postwalk identity 5 deep)))
     ;; walk/prewalk/postwalk take no max-depth argument at all -- there is
     ;; no ceiling to configure and no ceiling check to trip. The identical
     ;; input that bounded-prewalk/-postwalk refuse above passes straight
     ;; through unmodified.
-    (is (= deep (coll/prewalk identity deep)))
-    (is (= deep (coll/postwalk identity deep)))))
+    (is (= deep (walk/prewalk identity deep)))
+    (is (= deep (walk/postwalk identity deep)))))
 
 ;; -- keywordize-keys / stringify-keys ---------------------------------------
 ;;
@@ -274,20 +276,20 @@
 ;; forgot to recurse passes that one and fails the nested test.
 
 (deftest keywordize-keys-recurses-through-nested-collections
-  (is (= {:a 1} (coll/keywordize-keys {"a" 1})))
-  (is (= {:a {:b {:c 1}}} (coll/keywordize-keys {"a" {"b" {"c" 1}}})))
+  (is (= {:a 1} (walk/keywordize-keys {"a" 1})))
+  (is (= {:a {:b {:c 1}}} (walk/keywordize-keys {"a" {"b" {"c" 1}}})))
   ;; maps reached through a vector/list/set are walked too
-  (is (= {:a [{:b 1} {:c 2}]} (coll/keywordize-keys {"a" [{"b" 1} {"c" 2}]})))
-  (is (= [{:a 1}] (coll/keywordize-keys [{"a" 1}])))
+  (is (= {:a [{:b 1} {:c 2}]} (walk/keywordize-keys {"a" [{"b" 1} {"c" 2}]})))
+  (is (= [{:a 1}] (walk/keywordize-keys [{"a" 1}])))
   ;; values are never touched, only keys
-  (is (= {:a "b"} (coll/keywordize-keys {"a" "b"}))))
+  (is (= {:a "b"} (walk/keywordize-keys {"a" "b"}))))
 
 (deftest stringify-keys-recurses-through-nested-collections
-  (is (= {"a" 1} (coll/stringify-keys {:a 1})))
-  (is (= {"a" {"b" {"c" 1}}} (coll/stringify-keys {:a {:b {:c 1}}})))
-  (is (= {"a" [{"b" 1}]} (coll/stringify-keys {:a [{:b 1}]})))
+  (is (= {"a" 1} (walk/stringify-keys {:a 1})))
+  (is (= {"a" {"b" {"c" 1}}} (walk/stringify-keys {:a {:b {:c 1}}})))
+  (is (= {"a" [{"b" 1}]} (walk/stringify-keys {:a [{:b 1}]})))
   ;; a keyword VALUE stays a keyword; only keys are coerced
-  (is (= {"a" :b} (coll/stringify-keys {:a :b}))))
+  (is (= {"a" :b} (walk/stringify-keys {:a :b}))))
 
 (deftest key-coercion-touches-only-its-own-key-type
   ;; The discriminating case: a map whose keys are of several types at once.
@@ -295,29 +297,29 @@
   ;; numbers, vectors and symbols are left exactly as they were.
   (let [mixed {"s" 1 :k 2 3 :three [4] :vec 'sym :sym nil :nil}]
     (is (= {:s 1 :k 2 3 :three [4] :vec 'sym :sym nil :nil}
-           (coll/keywordize-keys mixed)))
+           (walk/keywordize-keys mixed)))
     (is (= {"s" 1 "k" 2 3 :three [4] :vec 'sym :sym nil :nil}
-           (coll/stringify-keys mixed)))))
+           (walk/stringify-keys mixed)))))
 
 (deftest stringify-keys-drops-the-namespace-and-is-not-round-trippable
   ;; Pinned deliberately: this is clojure.walk's behaviour, so a call site
   ;; migrating off clojure.walk gets the same answer. If a later change makes
   ;; stringify-keys namespace-preserving, this test must fail loudly rather
   ;; than that change landing silently under callers who depend on the loss.
-  (is (= {"b" 1} (coll/stringify-keys {:a/b 1})))
-  (is (not= {:a/b 1} (-> {:a/b 1} coll/stringify-keys coll/keywordize-keys)))
-  (is (= {:b 1} (-> {:a/b 1} coll/stringify-keys coll/keywordize-keys)))
+  (is (= {"b" 1} (walk/stringify-keys {:a/b 1})))
+  (is (not= {:a/b 1} (-> {:a/b 1} walk/stringify-keys walk/keywordize-keys)))
+  (is (= {:b 1} (-> {:a/b 1} walk/stringify-keys walk/keywordize-keys)))
   ;; an unqualified keyword IS round-trippable -- the boundary between the
   ;; two cases is exactly "does the keyword have a namespace"
-  (is (= {:b 1} (-> {:b 1} coll/stringify-keys coll/keywordize-keys))))
+  (is (= {:b 1} (-> {:b 1} walk/stringify-keys walk/keywordize-keys))))
 
 (deftest key-coercion-identity-on-empty-and-non-map-input
   ;; The "no input" case (question 1 of the 8): an empty map and a non-map
   ;; must not report success by doing nothing to something they should have
   ;; changed -- there is nothing to change, and they must not throw either.
-  (is (= {} (coll/keywordize-keys {})))
-  (is (= {} (coll/stringify-keys {})))
-  (is (= [] (coll/keywordize-keys [])))
-  (is (= 42 (coll/keywordize-keys 42)))
-  (is (= "a" (coll/stringify-keys "a")))
-  (is (nil? (coll/keywordize-keys nil))))
+  (is (= {} (walk/keywordize-keys {})))
+  (is (= {} (walk/stringify-keys {})))
+  (is (= [] (walk/keywordize-keys [])))
+  (is (= 42 (walk/keywordize-keys 42)))
+  (is (= "a" (walk/stringify-keys "a")))
+  (is (nil? (walk/keywordize-keys nil))))
