@@ -10,6 +10,7 @@
   on kotoba.lang.edn, where three assertions passed against nothing at all.
   Require the repo that defines the value.
 "
+  {:kotoba/export [assoc-some bounded-postwalk bounded-prewalk deep-merge filter-keys filter-vals index index-by join keywordize-keys map-keys map-vals postwalk postwalk-replace prewalk prewalk-replace project rename rename-keys select set-difference set-intersection set-union stringify-keys subset? superset? walk]}
   (:require [kotoba.coll.assoc-some :as assoc-some-ns]
             [kotoba.coll.bounded-postwalk :as bounded-postwalk-ns]
             [kotoba.coll.bounded-prewalk :as bounded-prewalk-ns]
