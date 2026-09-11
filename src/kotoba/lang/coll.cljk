@@ -8,6 +8,7 @@
   `reduce`/`merge`/`group-by`; this namespace adds the small map-shaping and
   recursive-merge helpers that are not in `clojure.core` but that every kotoba
   vertical lib re-implements."
+  {:kotoba/export [assoc-some bounded-postwalk bounded-prewalk deep-merge default-max-walk-depth filter-keys filter-vals index index-by join keywordize-keys map-keys map-vals postwalk postwalk-replace prewalk prewalk-replace project rename rename-keys select set-difference set-intersection set-union stringify-keys subset? superset? walk]}
   (:refer-clojure :exclude [merge]))
 
 (defn map-vals
