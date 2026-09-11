@@ -1,7 +1,7 @@
 {:schema :kotoba.coll-migration/v1
  :profile :kotoba.coll/bounded-v1
  :legacy
- {:source "src/kotoba/lang/coll.cljc"
+ {:source "src/kotoba/lang/coll.cljk"
   :status :retained-general-oracle}
  :canonical
  {:source "src/kotoba/lang/bounded_coll.kotoba"
