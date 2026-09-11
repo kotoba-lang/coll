@@ -14,7 +14,7 @@ This repo also covers `clojure.set` and `clojure.walk` — see
 (`com-junkawasaki/root`) and
 [`adr-2809061500-clojure-namespace-to-kotoba-stdlib`](https://github.com/com-junkawasaki/root/blob/main/90-docs/adr/2809061500-clojure-namespace-to-kotoba-stdlib.edn)
 for the program this is one piece of. Verified byte-for-byte identical
-behavior on both JVM (`clojure -M:test`) and nbb (see **Verify** below).
+behavior on both JVM (`kbb -M:test`) and nbb (see **Verify** below).
 
 ## Current surface
 
@@ -168,8 +168,8 @@ io.github.kotoba-lang/coll {:git/sha "<sha>"}
 ## Verify
 
 ```sh
-clojure -M:test                                  # JVM
-nbb --classpath src:test test/run_portable.cljk   # nbb / ClojureScript
+kbb -M:test                                  # JVM
+kbb --backend sci --classpath src:test test/run_portable.cljk   # nbb / ClojureScript
 ```
 
 Both run the **same** `.cljc` suite: `25 tests, 102 assertions, 0 failures`.
