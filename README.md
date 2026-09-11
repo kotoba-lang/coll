@@ -107,7 +107,7 @@ because some callers genuinely need real `clojure.walk` semantics, which
 this library must not silently approximate under a different name either.
 **Both directions of "just make them consistent" are the wrong fix.** See
 the `!!!! READ THIS BEFORE "FIXING" ... !!!!` comment directly above the
-unbounded functions in `src/kotoba/lang/coll.cljc` for the same warning at
+unbounded functions in `src/kotoba/lang/coll.cljk` for the same warning at
 the point future edits are most likely to happen.
 
 - `bounded-prewalk`, `bounded-postwalk` — depth/node-bounded, unchanged by
@@ -169,7 +169,7 @@ io.github.kotoba-lang/coll {:git/sha "<sha>"}
 
 ```sh
 clojure -M:test                                  # JVM
-nbb --classpath src:test test/run_portable.cljs   # nbb / ClojureScript
+nbb --classpath src:test test/run_portable.cljk   # nbb / ClojureScript
 ```
 
 Both run the **same** `.cljc` suite: `25 tests, 102 assertions, 0 failures`.
