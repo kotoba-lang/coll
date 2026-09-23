@@ -1,5 +1,5 @@
 (ns kotoba.set-walk-coll-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.set :as set]
             [kotoba.walk :as walk]
             [kotoba.coll :as coll]))

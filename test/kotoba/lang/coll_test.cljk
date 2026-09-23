@@ -1,5 +1,5 @@
 (ns kotoba.lang.coll-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.lang.coll :as coll]))
 
 (deftest map-vals-and-keys
