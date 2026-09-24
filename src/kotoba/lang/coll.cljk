@@ -109,6 +109,12 @@
 ;; clojure.set says [2 3 1], and a sorted or smaller-but-typed second set is
 ;; not the result's type. Those names keep that meaning (callers rely on it).
 ;;
+;; Portions below (bubble-max-key, union, intersection, difference,
+;; map-invert) are transcribed from ClojureScript's clojure/set.cljs:
+;;   Copyright (c) Rich Hickey. All rights reserved. Eclipse Public License
+;;   1.0 (http://opensource.org/licenses/eclipse-1.0.php); that license, not
+;;   this repository's Apache-2.0, governs these five definitions.
+;;
 ;; The four below are clojure.set -- transcribed from ClojureScript's
 ;; clojure/set.cljs (1.12.42), the implementation `clojure.set` resolves to on
 ;; the kbb engine, so a call site moved from clojure.set to this namespace
