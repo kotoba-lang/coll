@@ -6,6 +6,20 @@ kotoba-lang stdlib compatibility policy (kotoba-lang/kotoba-lang/docs/lang/stdli
 
 ## [Unreleased]
 
+### Added (2026-09-24, ADR-2609241200 count-gated codemod waves)
+
+- `union`, `intersection`, `difference`, `map-invert` under clojure.set's own
+  names, transcribed from ClojureScript's clojure/set.cljs (what `clojure.set`
+  is on the kbb engine): same value, collection type, order and nil handling.
+  `set-union`/`set-intersection`/`set-difference` keep their own (different)
+  meaning. Oracle: `test/kotoba/lang/coll_clojure_oracle_test.cljk`.
+
+### Fixed
+
+- `walk` (and so `prewalk`/`postwalk`/`*-replace`/`keywordize-keys`/
+  `stringify-keys`) rebuilds a map entry as a real map entry, not a 2-vector:
+  `(map-entry? x)` inside the walk function is now true, as under clojure.walk.
+
 `clojure.set`/`clojure.walk` gap-fill, per
 adr-2809061500-clojure-namespace-to-kotoba-stdlib (com-junkawasaki/root).
 
