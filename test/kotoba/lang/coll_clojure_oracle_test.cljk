@@ -145,3 +145,32 @@
     (is (= -1 (coll/index-of nil 1)))
     (is (= -1 (coll/index-of nil nil)))
     #?(:clj (is (thrown? NullPointerException (.indexOf ^java.util.List (identity nil) 1))))))
+
+;; the host's queue, built the host's way -- the oracle for empty-queue /
+;; queue / queue? (scripts/migrate-clojure-lang-persistentqueue-to-kotoba-coll.cljk)
+(def ^:private host-empty-queue
+  #?(:clj clojure.lang.PersistentQueue/EMPTY :cljs cljs.core/PersistentQueue.EMPTY))
+
+(def ^:private queue-seeds [[] [1] [1 2 3] [nil] [:a nil "b"] (range 20) '(3 2 1)])
+
+(defn- q-trace
+  "What a caller can observe of a queue: its seq, peek, the seq after pop,
+  count, printed form, type, and what conj then peek answer."
+  [q]
+  [(seq q) (peek q) (seq (pop q)) (count q) (pr-str q) (type q) (peek (conj q :z)) (seq (conj q :z))])
+
+(deftest empty-queue-and-queue-are-the-host-queue
+  (is (identical? host-empty-queue coll/empty-queue))
+  (is (identical? coll/empty-queue (coll/queue)))
+  (testing "every seed: (queue s) and (into empty-queue s) trace like the host queue"
+    (doseq [s queue-seeds]
+      (is (= (q-trace (into host-empty-queue s)) (q-trace (coll/queue s))) (pr-str s))
+      (is (= (q-trace (into host-empty-queue s)) (q-trace (into coll/empty-queue s))) (pr-str s))))
+  (testing "a vector is not a queue: the same seeds trace DIFFERENTLY (peek at the rear)"
+    (is (some #(not= (q-trace (coll/queue %)) (q-trace (vec %))) (filter seq queue-seeds)))))
+
+(deftest queue?-is-the-host-instance-check
+  (doseq [x [coll/empty-queue (coll/queue [1]) (conj host-empty-queue 1 2) (pop (coll/queue [1 2]))]]
+    (is (true? (coll/queue? x)) (pr-str x)))
+  (doseq [x [nil [] [1] '(1) (seq [1]) #{} {} "q" (range 3) (lazy-seq [1])]]
+    (is (false? (coll/queue? x)) (pr-str x))))

@@ -140,6 +140,22 @@ exactly like a real map-entry does. It is observable only via a type check
 like `(instance? clojure.lang.MapEntry ...)`, which this library does not
 attempt to reproduce.
 
+### Persistent queue — `clojure.lang.PersistentQueue` coverage
+
+- `empty-queue` — the host's empty queue itself (`clojure.lang.PersistentQueue/EMPTY`
+  on the JVM, `cljs.core/PersistentQueue.EMPTY` on kbb / ClojureScript)
+- `queue` — `(queue)` = `empty-queue`, `(queue coll)` = `(into empty-queue coll)`
+- `queue?` — the host's instance check for its persistent queue
+
+These exist so `.cljk` sources stop naming the JVM class: on the kbb engine
+`clojure.lang.PersistentQueue/EMPTY` does not resolve at all (measured
+2026-09-25), so sources carried `#?(:clj .. :cljs ..)` or failed to load
+there. Target of `scripts/migrate-clojure-lang-persistentqueue-to-kotoba-coll.cljk`
+(com-junkawasaki/root). The oracle test compares seq / peek / pop / count /
+type / print / conj of `(queue s)` with the host-built queue for every seed,
+and shows a vector traces differently (so the agreement is a measurement);
+JVM (Clojure 1.12.1) agrees 7 / 7.
+
 ## Kotoba source authority
 
 `src/kotoba/lang/bounded_coll.kotoba` is the sovereign, zero-capability kernel

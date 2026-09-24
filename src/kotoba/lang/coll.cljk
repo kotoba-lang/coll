@@ -8,7 +8,7 @@
   `reduce`/`merge`/`group-by`; this namespace adds the small map-shaping and
   recursive-merge helpers that are not in `clojure.core` but that every kotoba
   vertical lib re-implements."
-  {:kotoba/export [assoc-some difference intersection map-invert union bounded-postwalk bounded-prewalk deep-merge default-max-walk-depth filter-keys filter-vals index index-by index-of join keywordize-keys map-keys map-vals postwalk postwalk-replace prewalk prewalk-replace project rename rename-keys select set-difference set-intersection set-union stringify-keys subset? superset? walk]}
+  {:kotoba/export [assoc-some difference intersection map-invert union bounded-postwalk bounded-prewalk deep-merge default-max-walk-depth empty-queue filter-keys filter-vals index index-by index-of join keywordize-keys map-keys map-vals postwalk postwalk-replace prewalk prewalk-replace project queue queue? rename rename-keys select set-difference set-intersection set-union stringify-keys subset? superset? walk]}
   (:refer-clojure :exclude [merge]))
 
 (defn map-vals
@@ -507,3 +507,35 @@
   [form]
   (let [coerce (fn [[k v]] (if (keyword? k) [(name k) v] [k v]))]
     (postwalk (fn [x] (if (map? x) (into {} (map coerce) x) x)) form)))
+
+;; ---------------------------------------------------------------------------
+;; persistent queue -- the host's, under a kotoba name
+;; ---------------------------------------------------------------------------
+;;
+;; For scripts/migrate-clojure-lang-persistentqueue-to-kotoba-coll.cljk
+;; (com-junkawasaki/root): `clojure.lang.PersistentQueue/EMPTY` is a JVM class
+;; name, and on the kbb engine it does not resolve at all (`Unable to resolve
+;; symbol: clojure.lang.PersistentQueue/EMPTY`, measured 2026-09-25), so
+;; sources wrote a reader conditional or failed to load there. These are the
+;; host's own queue (the object, not a copy): conj adds at the rear, peek/pop
+;; work at the front, seq is front-to-rear, and it prints as the host prints
+;; it (`#queue [..]` on kbb / ClojureScript, `#object[clojure.lang.PersistentQueue ..]`
+;; from pr-str on the JVM, Clojure 1.12.1 -- measured).
+
+(def empty-queue
+  "The host's empty persistent queue: clojure.lang.PersistentQueue/EMPTY on
+  the JVM, cljs.core/PersistentQueue.EMPTY on the kbb engine / ClojureScript."
+  #?(:clj clojure.lang.PersistentQueue/EMPTY :cljs cljs.core/PersistentQueue.EMPTY))
+
+(defn queue
+  "A persistent queue holding the items of `coll` front-to-rear
+  (`(into empty-queue coll)`); `(queue)` is `empty-queue`."
+  ([] empty-queue)
+  ([coll] (into empty-queue coll)))
+
+(defn queue?
+  "True when `x` is the host's persistent queue --
+  `(instance? clojure.lang.PersistentQueue x)` on the JVM,
+  `(instance? cljs.core/PersistentQueue x)` on the kbb engine / ClojureScript."
+  [x]
+  (instance? #?(:clj clojure.lang.PersistentQueue :cljs cljs.core/PersistentQueue) x))
