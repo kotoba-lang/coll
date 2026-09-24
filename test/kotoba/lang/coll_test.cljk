@@ -2,6 +2,15 @@
   (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.lang.coll :as coll]))
 
+(deftest index-of-first-equal-or-minus-one
+  (is (= 1 (coll/index-of [:a :b :c] :b)))
+  (is (= 1 (coll/index-of '(1 2 2) 2)) "the FIRST match")
+  (is (= 0 (coll/index-of [{:id "x"}] {:id "x"})) "value equality, not identity")
+  (is (= 2 (coll/index-of ["a" "b" nil] nil)) "nil is an element like any other")
+  (is (= -1 (coll/index-of [1 2 3] 4)))
+  (is (= -1 (coll/index-of [] 1)))
+  (is (= -1 (coll/index-of nil 1))))
+
 (deftest map-vals-and-keys
   (is (= {:a 2 :b 3} (coll/map-vals inc {:a 1 :b 2})))
   (is (= {} (coll/map-vals inc {})))
