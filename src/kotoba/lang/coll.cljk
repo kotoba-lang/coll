@@ -8,7 +8,7 @@
   `reduce`/`merge`/`group-by`; this namespace adds the small map-shaping and
   recursive-merge helpers that are not in `clojure.core` but that every kotoba
   vertical lib re-implements."
-  {:kotoba/export [assoc-some bounded-postwalk bounded-prewalk deep-merge default-max-walk-depth filter-keys filter-vals index index-by join keywordize-keys map-keys map-vals postwalk postwalk-replace prewalk prewalk-replace project rename rename-keys select set-difference set-intersection set-union stringify-keys subset? superset? walk]}
+  {:kotoba/export [assoc-some difference intersection map-invert union bounded-postwalk bounded-prewalk deep-merge default-max-walk-depth filter-keys filter-vals index index-by join keywordize-keys map-keys map-vals postwalk postwalk-replace prewalk prewalk-replace project rename rename-keys select set-difference set-intersection set-union stringify-keys subset? superset? walk]}
   (:refer-clojure :exclude [merge]))
 
 (defn map-vals
@@ -100,6 +100,80 @@
   ([s1] s1)
   ([s1 s2] (into (empty s1) (remove #(contains? s2 %)) s1))
   ([s1 s2 & sets] (reduce set-difference (set-difference s1 s2) sets)))
+
+;; -- clojure.set's own names: union / intersection / difference / map-invert --
+;;
+;; set-union / set-intersection / set-difference above are NOT clojure.set:
+;; they always build on s1 (into (or s1 #{}) ...), so `(set-union nil)` is #{}
+;; where clojure.set says nil, `(set-union [1] [2 3])` is [1 2 3] where
+;; clojure.set says [2 3 1], and a sorted or smaller-but-typed second set is
+;; not the result's type. Those names keep that meaning (callers rely on it).
+;;
+;; The four below are clojure.set -- transcribed from ClojureScript's
+;; clojure/set.cljs (1.12.42), the implementation `clojure.set` resolves to on
+;; the kbb engine, so a call site moved from clojure.set to this namespace
+;; gets the same value, the same collection type, the same order and the same
+;; nil handling (scripts/migrate-clojure-set-to-kotoba-coll.cljk in
+;; com-junkawasaki/root rewrites only the namespace token). Semantics are
+;; pinned against clojure.set in test/kotoba/lang/coll_test.cljk.
+
+(defn- bubble-max-key
+  "Move a maximal element of coll according to fn k (which returns a
+  number) to the front of coll."
+  [k coll]
+  (let [max (apply max-key k coll)]
+    (cons max (remove #(identical? max %) coll))))
+
+(defn union
+  "Return a set that is the union of the input sets. clojure.set/union."
+  ([] #{})
+  ([s1] s1)
+  ([s1 s2]
+   (if (< (count s1) (count s2))
+     (reduce conj s2 s1)
+     (reduce conj s1 s2)))
+  ([s1 s2 & sets]
+   (let [bubbled-sets (bubble-max-key count (conj sets s2 s1))]
+     (reduce into (first bubbled-sets) (rest bubbled-sets)))))
+
+(defn intersection
+  "Return a set that is the intersection of the input sets.
+  clojure.set/intersection."
+  ([s1] s1)
+  ([s1 s2]
+   (if (< (count s2) (count s1))
+     (recur s2 s1)
+     (reduce (fn [result item]
+               (if (contains? s2 item)
+                 result
+                 (disj result item)))
+             s1 s1)))
+  ([s1 s2 & sets]
+   (let [bubbled-sets (bubble-max-key #(- (count %)) (conj sets s2 s1))]
+     (reduce intersection (first bubbled-sets) (rest bubbled-sets)))))
+
+(defn difference
+  "Return a set that is the first set without elements of the remaining
+  sets. clojure.set/difference."
+  ([s1] s1)
+  ([s1 s2]
+   (if (< (count s1) (count s2))
+     (reduce (fn [result item]
+               (if (contains? s2 item)
+                 (disj result item)
+                 result))
+             s1 s1)
+     (reduce disj s1 s2)))
+  ([s1 s2 & sets]
+   (reduce difference s1 (conj sets s2))))
+
+(defn map-invert
+  "Returns the map with the vals mapped to the keys. clojure.set/map-invert."
+  [m]
+  (persistent!
+   (reduce-kv (fn [m k v] (assoc! m v k))
+              (transient {})
+              m)))
 
 ;; -- Relational algebra (clojure.set gap-fill) -------------------------------
 ;; Completes clojure.set coverage in this namespace: set-union/intersection/
@@ -307,16 +381,13 @@
 ;;
 ;; Semantics (walk's cond order, the map-entry/record special cases, prewalk
 ;; = top-down, postwalk = bottom-up) are transcribed from clojure.walk, not
-;; reinvented. One documented representational difference: a walked
-;; map-entry is reconstructed here as a plain 2-element vector rather than
-;; the host's native map-entry object (clojure.lang.MapEntry on :clj, a
-;; MapEntry record on :cljs). This is NOT a behavior divergence for any
-;; normal use -- `(= (first {:a 1}) [:a 1])` is true in both Clojure and
-;; ClojureScript (a map entry is `Sequential` and compares by value against
-;; a vector of the same two elements), and a plain 2-element vector conj's
-;; onto a map exactly like a real map-entry does. It is only observable via
-;; a type-check like `(instance? clojure.lang.MapEntry ...)`, which this
-;; library does not attempt to reproduce.
+;; reinvented. A walked map-entry is rebuilt as a real map entry --
+;; `(first {k v})`, which is the host's own entry type on both runtimes
+;; (clojure.lang.MapEntry / cljs MapEntry), as clojure.walk builds one --
+;; so `(map-entry? x)`, `key` and `val` inside the walk function see what
+;; they see under clojure.walk. (Until 2026-09-24 this built a plain 2-vector,
+;; and the common `(postwalk #(if (map-entry? %) ... %) m)` idiom silently
+;; skipped every entry.)
 
 (defn walk
   "The most general tree walker: recursively applies `inner` to each
@@ -327,7 +398,7 @@
   [inner outer form]
   (cond
     (list? form) (outer (apply list (map inner form)))
-    (map-entry? form) (outer [(inner (key form)) (inner (val form))])
+    (map-entry? form) (outer (first {(inner (key form)) (inner (val form))}))
     (seq? form) (outer (doall (map inner form)))
     (record? form) (outer (reduce (fn [r x] (conj r (inner x))) form form))
     (coll? form) (outer (into (empty form) (map inner form)))
