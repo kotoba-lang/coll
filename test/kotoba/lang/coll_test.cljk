@@ -1,5 +1,5 @@
 (ns kotoba.lang.coll-test
-  (:require [kotoba.test :refer [deftest is testing]]
+  (:require [kotoba.lang.error :as kerror] [kotoba.test :refer [deftest is testing]]
             [kotoba.lang.coll :as coll]))
 
 (deftest index-of-first-equal-or-minus-one
@@ -102,10 +102,10 @@
 (deftest bounded-walk-rejects-past-depth-limit
   (let [deep (reduce (fn [acc _] {:n acc}) 0 (range 5))]
     ;; depth 0 is the root map itself; five nested maps need depth >= 5
-    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+    (is (thrown-with-msg? kerror/ExceptionInfo
                            #"bounded depth limit"
                            (coll/bounded-prewalk identity 2 deep)))
-    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+    (is (thrown-with-msg? kerror/ExceptionInfo
                            #"bounded depth limit"
                            (coll/bounded-postwalk identity 2 deep)))
     ;; a depth ceiling that fits does not throw
@@ -262,10 +262,10 @@
   ;; ceiling-enforcement behavior is the entire, intentional point of the
   ;; bounded-* variants and must not change.
   (let [deep (reduce (fn [acc _] [acc]) 0 (range 50))]
-    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+    (is (thrown-with-msg? kerror/ExceptionInfo
                            #"bounded depth limit"
                            (coll/bounded-prewalk identity 5 deep)))
-    (is (thrown-with-msg? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
+    (is (thrown-with-msg? kerror/ExceptionInfo
                            #"bounded depth limit"
                            (coll/bounded-postwalk identity 5 deep)))
     ;; walk/prewalk/postwalk take no max-depth argument at all -- there is
